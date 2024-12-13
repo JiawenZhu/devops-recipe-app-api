@@ -6,14 +6,13 @@ terraform {
     }
   }
 
- /*/ backend "s3" {
+  backend "s3" {
     bucket         = "aws-exam-quiz-app-document-s3-storage"
     key            = "tf-state-setup"
     region         = "us-east-1"
     encrypt        = true
     dynamodb_table = "devops-recipe-app-api-tf-lock"
   }
-  */
 }
 
 provider "aws" {
