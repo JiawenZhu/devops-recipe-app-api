@@ -6,13 +6,14 @@ terraform {
     }
   }
 
-  backend "s3" {
+ /*/ backend "s3" {
     bucket         = "aws-exam-quiz-app-document-s3-storage"
     key            = "tf-state-setup"
     region         = "us-east-1"
     encrypt        = true
     dynamodb_table = "devops-recipe-app-api-tf-lock"
   }
+  */
 }
 
 provider "aws" {
@@ -25,5 +26,21 @@ provider "aws" {
       Contact     = var.contact
       ManageBy    = "Terraform/setup"
     }
+  }
+}
+# DynamoDB table for Terraform state locking
+resource "aws_dynamodb_table" "terraform_lock" {
+  name           = "devops-recipe-app-api-tf-lock"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "LockID"
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "Terraform State Lock Table"
+    Description = "DynamoDB table for Terraform state locking"
   }
 }
