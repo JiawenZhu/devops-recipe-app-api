@@ -401,3 +401,65 @@ resource "aws_iam_user_policy_attachment" "route53" {
   user       = aws_iam_user.cd.name
   policy_arn = aws_iam_policy.route53.arn
 }
+
+########################
+# Policy for ECR access #
+########################
+
+resource "aws_iam_policy" "ecr_access_policy" {
+  # Name of the policy - using the app name for clear identification
+  name        = "recipe-app-api-ecr-access"
+  # Description explaining the purpose of this policy
+  description = "Policy for ECR access for recipe app API"
+
+  # Using jsonencode to create the IAM policy document
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        # List of ECR permissions needed for pushing/pulling images:
+        # - DescribeImages: List image details in repository
+        # - GetAuthorizationToken: Authenticate with ECR
+        # - BatchCheckLayerAvailability: Check if image layers exist
+        # - GetDownloadUrlForLayer: Get URLs for downloading layers
+        # - BatchGetImage: Pull images from repository
+        # - PutImage: Push images to repository
+        # - InitiateLayerUpload, UploadLayerPart, CompleteLayerUpload: Upload image layers
+        Action = [
+          "ecr:DescribeImages",
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload"
+        ]
+        # Specific ECR repository ARNs where these permissions apply
+        Resource = [
+          "arn:aws:ecr:us-east-1:028174561390:repository/recipe-app-api-app",
+          "arn:aws:ecr:us-east-1:028174561390:repository/recipe-app-api-proxy"
+        ]
+      },
+      {
+        Effect = "Allow"
+        # GetAuthorizationToken needs to be allowed on all resources
+        # This is required for ECR authentication
+        Action = "ecr:GetAuthorizationToken"
+        # "*" means this permission applies to all resources
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Attach the ECR policy to the CD user
+resource "aws_iam_user_policy_attachment" "ecr_policy_attachment" {
+  # The IAM user who needs ECR access
+  user       = "recipe-app-api-cd"
+  # Reference to the ARN of the policy we created above
+  policy_arn = aws_iam_policy.ecr_access_policy.arn
+}
+
