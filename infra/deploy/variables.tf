@@ -43,7 +43,7 @@ variable "subdomain" {
   description = "Subdomain for each environment"
   type        = map(string)
 
-  default = {
+ default = {
     prod    = "api"
     staging = "api.staging"
     dev     = "api.dev"
