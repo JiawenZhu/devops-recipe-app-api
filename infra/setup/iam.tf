@@ -405,3 +405,41 @@ resource "aws_iam_user_policy_attachment" "route53" {
   user       = aws_iam_user.cd.name
   policy_arn = aws_iam_policy.route53.arn
 }
+#########################
+# Policy for S3 access #
+#########################
+
+data "aws_iam_policy_document" "s3" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket"
+    ]
+    resources = [
+      "arn:aws:s3:::aws-exam-quiz-app-document-s3-storage"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject"
+    ]
+    resources = [
+      "arn:aws:s3:::aws-exam-quiz-app-document-s3-storage/*"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "s3" {
+  name        = "${aws_iam_user.cd.name}-s3"
+  description = "Allow user to manage S3 resources."
+  policy      = data.aws_iam_policy_document.s3.json
+}
+
+resource "aws_iam_user_policy_attachment" "s3" {
+  user       = aws_iam_user.cd.name
+  policy_arn = aws_iam_policy.s3.arn
+}
