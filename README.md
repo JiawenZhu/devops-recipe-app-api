@@ -1,8 +1,25 @@
-# DevOps Deployment Automation with Terraform, AWS and Docker - Starter Code
+# DevOps Deployment Automation with Terraform, AWS and Docker
 
-This project contains the starter code for our course: [DevOps Deployment Automation with Terraform, AWS and Docker](https://londonapp.dev/c3).
+This project contains a Django REST API that can be deployed to AWS using Terraform and GitHub Actions.
 
-It contains the code you should have by the end of our [Build a Backend REST API with Python & Django REST Framework - Advanced](https://londonapp.dev/c2) course. We've created this snapshot, in-case we update the aforementioned course in the future.
+## Deployment with GitHub Actions
+
+This project includes a GitHub Actions workflow for automated deployment to AWS. The workflow:
+
+1. Sets up the required AWS infrastructure using Terraform
+2. Builds and pushes Docker images to Amazon ECR
+3. Deploys the application to Amazon ECS Fargate
+4. Runs database migrations and collects static files
+
+For detailed information about the deployment process:
+- See [.github/README.md](.github/README.md) for GitHub Actions workflow details
+- See [infra/README.md](infra/README.md) for infrastructure documentation
+
+## Original Project
+
+This project is based on the starter code for the course: [DevOps Deployment Automation with Terraform, AWS and Docker](https://londonapp.dev/c3).
+
+It contains the code from the [Build a Backend REST API with Python & Django REST Framework - Advanced](https://londonapp.dev/c2) course.
 
 ## Local Development
 
@@ -209,5 +226,3 @@ Or find them below:
 - [Build a Backend REST API with Python & Django REST Framework - Beginner](https://londonapp.dev/c1)
 - [Build a Backend REST API with Python & Django REST Framework - Advanced](https://londonapp.dev/c2)
 - [Deploy a Serverless Django App on Google App Engine](https://londonapp.dev/c5)
-
-helloword

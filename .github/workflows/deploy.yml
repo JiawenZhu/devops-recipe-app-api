@@ -1,103 +1,173 @@
-name: Deploy
+name: Deploy Recipe App API
 
 on:
   push:
-    branches:
-      - main
-      - prod
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
 
 jobs:
-  test-lint:
-    uses: ./.github/workflows/test-and-lint.yml
-    name: Test and Lint
-    secrets:
-      DOCKERHUB_USER: ${{ vars.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-
-  deploy:
-    name: Deploy
-    runs-on: ubuntu-22.04
-    needs: [test-lint]
+  setup:
+    name: Setup Infrastructure
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-access-key-id: ${{ vars.AWS_ACCESS_KEY_ID }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Set vars
-        run: |
-          if [[ $GITHUB_REF == 'refs/heads/prod' ]]; then
-            echo "prod" > .workspace
-          else
-            echo "staging" > .workspace
-          fi
-          echo "Workspace set to: $(cat .workspace)"
-      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init (Setup)
+        working-directory: ./infra/setup
+        run: terraform init
+
+      - name: Terraform Apply (Setup)
+        working-directory: ./infra/setup
+        run: terraform apply -auto-approve
+
+  build-and-push:
+    name: Build and Push Docker Images
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
       - name: Login to Amazon ECR
         id: login-ecr
-        run: |
-          echo "Logging into ECR..."
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-          
-      - name: Build and Push App Image
-        run: |
-          echo "Building app image for commit: $GITHUB_SHA"
-          docker build --compress --no-cache -t ${{ vars.ECR_REPO_APP }}:$GITHUB_SHA .
-          
-          echo "Running security scan on app image..."
-          docker scan ${{ vars.ECR_REPO_APP }}:$GITHUB_SHA || true
-          
-          echo "Pushing app image to ECR..."
-          docker push ${{ vars.ECR_REPO_APP }}:$GITHUB_SHA
-          
-          echo "Verifying app image push..."
-          aws ecr describe-images --repository-name recipe-app-api-app --image-ids imageTag=$GITHUB_SHA
+        uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build and Push Proxy Image
+      - name: Get ECR Repository URLs
+        id: get-ecr-urls
         run: |
-          echo "Building proxy image for commit: $GITHUB_SHA"
-          docker build --compress --no-cache -t ${{ vars.ECR_REPO_PROXY }}:$GITHUB_SHA proxy/
-          
-          echo "Running security scan on proxy image..."
-          docker scan ${{ vars.ECR_REPO_PROXY }}:$GITHUB_SHA || true
-          
-          echo "Pushing proxy image to ECR..."
-          docker push ${{ vars.ECR_REPO_PROXY }}:$GITHUB_SHA
-          
-          echo "Verifying proxy image push..."
-          aws ecr describe-images --repository-name recipe-app-api-proxy --image-ids imageTag=$GITHUB_SHA
+          APP_REPO=$(aws ecr describe-repositories --repository-names recipe-app-api-app --query 'repositories[0].repositoryUri' --output text)
+          PROXY_REPO=$(aws ecr describe-repositories --repository-names recipe-app-api-proxy --query 'repositories[0].repositoryUri' --output text)
+          echo "APP_REPO=$APP_REPO" >> $GITHUB_ENV
+          echo "PROXY_REPO=$PROXY_REPO" >> $GITHUB_ENV
 
-      - name: Show ECR Image Details
-        run: |
-          echo "Latest images in App repository:"
-          aws ecr describe-images \
-            --repository-name recipe-app-api-app \
-            --output table \
-            --query 'imageDetails[*].{Tag:imageTags[0],Pushed:imagePushedAt}'
+      - name: Build and push App image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ env.APP_REPO }}:${{ github.sha }},${{ env.APP_REPO }}:latest
 
-      - name: Terraform Apply
-        env:
-          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
-          TF_VAR_django_secret_key: ${{ secrets.TF_VAR_DJANGO_SECRET_KEY }}
+      - name: Build and push Proxy image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./proxy
+          push: true
+          tags: ${{ env.PROXY_REPO }}:${{ github.sha }},${{ env.PROXY_REPO }}:latest
+
+      - name: Set image tags for deployment
         run: |
-          echo "Setting Terraform variables..."
-          export TF_VAR_ecr_app_image="${{ vars.ECR_REPO_APP }}:$GITHUB_SHA"
-          export TF_VAR_ecr_proxy_image="${{ vars.ECR_REPO_PROXY }}:$GITHUB_SHA"
-          
-          workspace=$(cat .workspace)
-          echo "Using Terraform workspace: $workspace"
-          
-          cd infra/
-          echo "Initializing Terraform..."
-          docker compose run --rm terraform -chdir=deploy/ init
-          
-          echo "Selecting Terraform workspace..."
-          docker compose run --rm terraform -chdir=deploy/ workspace select -or-create $workspace
-          
-          echo "Applying Terraform changes..."
-          docker compose run --rm terraform -chdir=deploy/ apply -auto-approve
+          echo "APP_IMAGE=${{ env.APP_REPO }}:${{ github.sha }}" >> $GITHUB_ENV
+          echo "PROXY_IMAGE=${{ env.PROXY_REPO }}:${{ github.sha }}" >> $GITHUB_ENV
+
+  deploy:
+    name: Deploy Infrastructure
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init (Deploy)
+        working-directory: ./infra/deploy
+        run: terraform init
+
+      - name: Terraform Workspace
+        working-directory: ./infra/deploy
+        run: |
+          WORKSPACE="${{ github.event.inputs.environment || 'dev' }}"
+          terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+
+      - name: Terraform Apply (Deploy)
+        working-directory: ./infra/deploy
+        run: |
+          terraform apply -auto-approve \
+            -var="ecr_app_image=${{ env.APP_IMAGE }}" \
+            -var="ecr_proxy_image=${{ env.PROXY_IMAGE }}" \
+            -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}"
+
+  migrate-and-collectstatic:
+    name: Run Migrations and Collect Static Files
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Get ECS Task ARN
+        id: get-task
+        run: |
+          CLUSTER_NAME="recipe-app-${{ github.event.inputs.environment || 'dev' }}-cluster"
+          SERVICE_NAME="recipe-app-${{ github.event.inputs.environment || 'dev' }}-api"
+          TASK_ARN=$(aws ecs list-tasks --cluster $CLUSTER_NAME --service-name $SERVICE_NAME --query 'taskArns[0]' --output text)
+          echo "TASK_ARN=$TASK_ARN" >> $GITHUB_ENV
+
+      - name: Run Migrations
+        run: |
+          aws ecs execute-command \
+            --cluster recipe-app-${{ github.event.inputs.environment || 'dev' }}-cluster \
+            --task ${{ env.TASK_ARN }} \
+            --container api \
+            --command "/bin/sh -c 'cd /app && python manage.py migrate'" \
+            --interactive
+
+      - name: Collect Static Files
+        run: |
+          aws ecs execute-command \
+            --cluster recipe-app-${{ github.event.inputs.environment || 'dev' }}-cluster \
+            --task ${{ env.TASK_ARN }} \
+            --container api \
+            --command "/bin/sh -c 'cd /app && python manage.py collectstatic --noinput'" \
+            --interactive
