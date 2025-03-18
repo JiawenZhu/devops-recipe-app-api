@@ -70,6 +70,29 @@ terraform workspace select dev  # or create a new workspace
 terraform apply -var="ecr_app_image=<app_image_url>" -var="ecr_proxy_image=<proxy_image_url>" -var="django_secret_key=<secret_key>"
 ```
 
+## Destroying Infrastructure
+
+To destroy the infrastructure manually, follow these steps:
+
+### Destroy Deployment Infrastructure First
+
+```bash
+cd infra/deploy
+terraform init
+terraform workspace select dev  # or the workspace you want to destroy
+terraform destroy
+```
+
+### Then Destroy Setup Infrastructure
+
+```bash
+cd infra/setup
+terraform init
+terraform destroy
+```
+
+> **Important**: Always destroy the deployment infrastructure before destroying the setup infrastructure to avoid dependency issues.
+
 ## Infrastructure Diagram
 
 ```

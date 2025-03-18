@@ -1,28 +1,94 @@
-name: Destroy
+name: Destroy AWS Infrastructure
 
 on:
   workflow_dispatch:
     inputs:
       environment:
+        description: 'Environment to destroy'
+        required: true
+        default: 'dev'
         type: choice
-        description: Which environment to remove AWS resources for?
         options:
+          - dev
           - staging
           - prod
+      confirm_destroy:
+        description: 'Type "destroy" to confirm'
+        required: true
+        type: string
 
 jobs:
-  destroy:
-    name: Destroy
-    runs-on: ubuntu-22.04
+  validate-input:
+    name: Validate Destroy Confirmation
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Terraform Destroy
-        env:
-          AWS_ACCESS_KEY_ID: ${{ vars.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Check confirmation
+        if: ${{ github.event.inputs.confirm_destroy != 'destroy' }}
         run: |
-          export TF_WORKSPACE=${{ github.event.inputs.environment }}
-          cd infra/
-          docker compose run --rm terraform -chdir=deploy/ init
-          docker compose run --rm terraform -chdir=deploy/ destroy -auto-approve
+          echo "Error: You must type 'destroy' to confirm destruction of resources."
+          exit 1
+
+  destroy-deploy:
+    name: Destroy Deployment Infrastructure
+    needs: validate-input
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init (Deploy)
+        working-directory: ./infra/deploy
+        run: terraform init
+
+      - name: Terraform Workspace
+        working-directory: ./infra/deploy
+        run: |
+          WORKSPACE="${{ github.event.inputs.environment }}"
+          terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+
+      - name: Terraform Destroy (Deploy)
+        working-directory: ./infra/deploy
+        run: |
+          terraform destroy -auto-approve
+
+  destroy-setup:
+    name: Destroy Setup Infrastructure
+    needs: destroy-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init (Setup)
+        working-directory: ./infra/setup
+        run: terraform init
+
+      - name: Terraform Destroy (Setup)
+        working-directory: ./infra/setup
+        run: |
+          terraform destroy -auto-approve

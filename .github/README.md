@@ -37,6 +37,21 @@ You can also trigger the workflow manually:
 4. Select the environment to deploy to (dev, staging, or prod)
 5. Click "Run workflow"
 
+### Destroying Infrastructure
+
+To destroy all AWS resources:
+
+1. Go to the "Actions" tab in your GitHub repository
+2. Select the "Destroy AWS Infrastructure" workflow
+3. Click "Run workflow"
+4. Select the environment to destroy (dev, staging, or prod)
+5. Type "destroy" in the confirmation field
+6. Click "Run workflow"
+
+This will destroy all resources in the following order:
+1. Deployment infrastructure (ECS, RDS, EFS, etc.)
+2. Setup infrastructure (ECR repositories, IAM roles, etc.)
+
 ## Environment Management
 
 The workflow supports multiple environments:
