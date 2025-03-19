@@ -416,7 +416,7 @@ data "aws_iam_policy_document" "s3" {
       "s3:ListBucket"
     ]
     resources = [
-      "arn:aws:s3:::aws-exam-quiz-app-document-s3-storage"
+      "arn:aws:s3:::devops-recipe-app-api-state"
     ]
   }
 
@@ -428,7 +428,7 @@ data "aws_iam_policy_document" "s3" {
       "s3:DeleteObject"
     ]
     resources = [
-      "arn:aws:s3:::aws-exam-quiz-app-document-s3-storage/*"
+      "arn:aws:s3:::devops-recipe-app-api-state/*"
     ]
   }
 }

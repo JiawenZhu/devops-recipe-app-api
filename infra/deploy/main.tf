@@ -7,7 +7,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket               = "aws-exam-quiz-app-document-s3-storage"
+    bucket               = "devops-recipe-app-api-state"
     key                  = "tf-state-deploy"
     workspace_key_prefix = "tf-state-deploy-env"
     region               = "us-east-1"
