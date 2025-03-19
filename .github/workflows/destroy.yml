@@ -62,7 +62,9 @@ jobs:
       - name: Terraform Destroy (Deploy)
         working-directory: ./infra/deploy
         run: |
-          terraform destroy -auto-approve
+          terraform destroy -auto-approve \
+            -var="db_password=${{ secrets.TF_VAR_DB_PASSWORD }}" \
+            -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}"
 
   destroy-setup:
     name: Destroy Setup Infrastructure

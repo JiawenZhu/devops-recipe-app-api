@@ -128,7 +128,8 @@ jobs:
           terraform apply -auto-approve \
             -var="ecr_app_image=${{ env.APP_IMAGE }}" \
             -var="ecr_proxy_image=${{ env.PROXY_IMAGE }}" \
-            -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}"
+            -var="django_secret_key=${{ secrets.DJANGO_SECRET_KEY }}" \
+            -var="db_password=${{ secrets.TF_VAR_DB_PASSWORD }}"
 
   migrate-and-collectstatic:
     name: Run Migrations and Collect Static Files
